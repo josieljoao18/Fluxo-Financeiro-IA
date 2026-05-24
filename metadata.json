@@ -1,0 +1,6 @@
+{
+  "name": "Finance Flow",
+  "description": "Plataforma financeira inteligente com IA, entrada rápida por comando de voz/foto, dashboard premium e hub de controle para motoristas de aplicativo.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
