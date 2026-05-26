@@ -60,3 +60,23 @@ export interface GamificationState {
   points: number;
   nextLevelPoints: number;
 }
+
+export interface DebtorPayment {
+  id: string;
+  date: string;
+  amount: number;
+}
+
+export interface Debtor {
+  id: string;
+  name: string;
+  phone: string;
+  amount: number; // remaining balance
+  initialAmount: number; // original amount
+  date: string;
+  dueDate: string;
+  notes: string;
+  status: 'pendente' | 'pago' | 'atrasado';
+  payments: DebtorPayment[];
+}
+

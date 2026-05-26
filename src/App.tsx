@@ -11,6 +11,7 @@ import { DriverFlowView } from './components/DriverFlowView';
 import { HistoryView } from './components/HistoryView';
 import { GoalsView } from './components/GoalsView';
 import { ConsultantTab } from './components/ConsultantTab';
+import { MeDevemView } from './components/MeDevemView';
 import { 
   LayoutDashboard, 
   Mic, 
@@ -24,22 +25,24 @@ import {
   X,
   CheckCircle,
   HelpCircle,
-  TrendingUp
+  TrendingUp,
+  HandCoins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 function DashboardLayout() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'voice' | 'driver' | 'history' | 'goals' | 'advisor'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'voice' | 'driver' | 'history' | 'goals' | 'advisor' | 'debtors'>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   
-  const { notifications, markNotificationsAsRead } = useFinance();
+  const { notifications, markNotificationsAsRead, apiStatus } = useFinance();
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const tabsConfig = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, component: DashboardView },
     { id: 'voice', label: 'Entrada IA', icon: Mic, component: QuickInputView },
     { id: 'driver', label: 'Driver Flow', icon: Car, component: DriverFlowView },
+    { id: 'debtors', label: 'Me Devem', icon: HandCoins, component: MeDevemView },
     { id: 'history', label: 'Extrato', icon: History, component: HistoryView },
     { id: 'goals', label: 'Metas', icon: Trophy, component: GoalsView },
     { id: 'advisor', label: 'Consultoria IA', icon: Sparkles, component: ConsultantTab },
@@ -159,6 +162,26 @@ function DashboardLayout() {
           </div>
         </div>
       </header>
+
+      {/* ⚠️ Warning banner when Gemini API quota is exhausted */}
+      {apiStatus === 'quota_exhausted' && (
+        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-300 font-medium flex items-center justify-center gap-2">
+          <span className="text-amber-400">⚠️</span>
+          <span>
+            <strong>Modo Inteligente Local Ativo:</strong> O limite de cota da API Gemini foi atingido. O Finance Flow continua funcionando normalmente offline com inteligência sintética e simulações rápidas!
+          </span>
+        </div>
+      )}
+
+      {/* 🛡️ Info banner when GEMINI_API_KEY is not configured */}
+      {apiStatus === 'offline' && (
+        <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-b border-indigo-500/20 px-4 py-2 text-center text-xs text-indigo-300 font-medium flex items-center justify-center gap-2">
+          <span className="text-indigo-400">ℹ️</span>
+          <span>
+            <strong>Modo Off-line Heurístico:</strong> Executando com o motor analítico local seguro. Todas as funções financeiras e simulações continuam 100% disponíveis offline.
+          </span>
+        </div>
+      )}
 
       {/* 📱 Mobile Drawer Menu */}
       <AnimatePresence>

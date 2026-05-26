@@ -10,7 +10,9 @@ import {
   FinancialGoal, 
   FinancialInsight, 
   AppNotification,
-  GamificationState 
+  GamificationState,
+  Debtor,
+  DebtorPayment
 } from './types';
 
 interface FinanceContextProps {
@@ -26,6 +28,8 @@ interface FinanceContextProps {
     loading: boolean;
   };
   isLoadingAI: boolean;
+  apiStatus: 'online' | 'quota_exhausted' | 'offline';
+  debtors: Debtor[];
   
   // Actions
   addTransaction: (t: Omit<Transaction, 'id'>) => Transaction;
@@ -38,6 +42,11 @@ interface FinanceContextProps {
   verifyStreak: () => void;
   markNotificationsAsRead: () => void;
   addNotification: (title: string, body: string, type: AppNotification['type']) => void;
+
+  addDebtor: (debtor: Omit<Debtor, 'id' | 'payments' | 'status'>) => void;
+  deleteDebtor: (id: string) => void;
+  addPaymentToDebtor: (id: string, amount: number, date: string) => void;
+  markDebtAsPaid: (id: string) => void;
 
   // AI Integration Proxies
   parseFinancialCommand: (phrase: string) => Promise<Transaction | null>;
@@ -84,6 +93,49 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   { id: 'n2', title: 'Cuidado extra com Lazer', body: 'Seus gastos em Alimentação cresceram esta semana. Fique atento!', type: 'limit', date: '2026-05-23T08:00:00Z', read: false }
 ];
 
+const INITIAL_DEBTORS: Debtor[] = [
+  {
+    id: 'db1',
+    name: 'Carlos Oliveira',
+    phone: '11988887777',
+    amount: 150.00,
+    initialAmount: 250.00,
+    date: '2026-05-15',
+    dueDate: '2026-05-30',
+    notes: 'Ajuste de conserto de parachoque Uber',
+    status: 'pendente',
+    payments: [
+      { id: 'p1_db1', date: '2026-05-20', amount: 100.00 }
+    ]
+  },
+  {
+    id: 'db2',
+    name: 'Juliana Portela',
+    phone: '21977776666',
+    amount: 320.00,
+    initialAmount: 320.00,
+    date: '2026-05-22',
+    dueDate: '2026-06-05',
+    notes: 'Acessório de celular para viagens de aplicativo',
+    status: 'pendente',
+    payments: []
+  },
+  {
+    id: 'db3',
+    name: 'Marcos Souza',
+    phone: '11966665555',
+    amount: 0,
+    initialAmount: 180.00,
+    date: '2026-05-10',
+    dueDate: '2026-05-20',
+    notes: 'Reserva provisória de combustível para corridas extra',
+    status: 'pago',
+    payments: [
+      { id: 'p1_db3', date: '2026-05-18', amount: 180.00 }
+    ]
+  }
+];
+
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem('ff_transactions');
@@ -110,6 +162,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
+  const [debtors, setDebtors] = useState<Debtor[]>(() => {
+    const saved = localStorage.getItem('ff_debtors');
+    return saved ? JSON.parse(saved) : INITIAL_DEBTORS;
+  });
+
   // State for calculated AI insights
   const [aiInsight, setAiInsight] = useState<{
     summaryText: string;
@@ -124,6 +181,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [apiStatus, setApiStatus] = useState<'online' | 'quota_exhausted' | 'offline'>('online');
 
   // Sync to localStorage
   useEffect(() => {
@@ -145,6 +203,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem('ff_notifications', JSON.stringify(notifications));
   }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem('ff_debtors', JSON.stringify(debtors));
+  }, [debtors]);
 
   // Load AI Insights triggers on init or when operations change
   useEffect(() => {
@@ -273,6 +335,111 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDriverLogs(prev => prev.filter(l => l.id !== id));
   };
 
+  // Debtor Operations
+  const addDebtor = (d: Omit<Debtor, 'id' | 'payments' | 'status'>) => {
+    const today = '2026-05-23';
+    const isOverdue = d.dueDate < today;
+    const newDebtor: Debtor = {
+      ...d,
+      id: 'db_' + Math.random().toString(36).substring(2, 11),
+      status: isOverdue ? 'atrasado' : 'pendente',
+      payments: []
+    };
+    setDebtors(prev => [newDebtor, ...prev]);
+    addPoints(15);
+    addNotification('Cobrança Criada 📂', `Você registrou uma cobrança de R$ ${d.amount.toFixed(2)} para ${d.name}.`, 'system');
+  };
+
+  const deleteDebtor = (id: string) => {
+    setDebtors(prev => prev.filter(d => d.id !== id));
+  };
+
+  const addPaymentToDebtor = (id: string, amount: number, date: string) => {
+    setDebtors(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      
+      const newAmount = Math.max(0, d.amount - amount);
+      const newPayments = [
+        ...d.payments,
+        {
+          id: 'pay_' + Math.random().toString(36).substring(2, 11),
+          date,
+          amount
+        }
+      ];
+      
+      const newlyPaid = newAmount === 0;
+      
+      if (newlyPaid) {
+        addNotification('Dívida Quitada! 🎉', `${d.name} quitou a dívida total de R$ ${d.initialAmount.toFixed(2)}!`, 'goal');
+        addPoints(40);
+        // Add as a gain transaction automatically to balance ledger!
+        addTransaction({
+          amount: d.initialAmount,
+          description: `Recebimento: Quitação de ${d.name}`,
+          category: 'vendas',
+          type: 'gain',
+          date
+        });
+      } else {
+        addNotification('Pagamento Registrado 💰', `${d.name} pagou R$ ${amount.toFixed(2)}. Restante: R$ ${newAmount.toFixed(2)}.`, 'system');
+        addPoints(15);
+        // Add partial payment as a gain transaction automatically to balance ledger!
+        addTransaction({
+          amount,
+          description: `Recebimento Parcial: ${d.name}`,
+          category: 'vendas',
+          type: 'gain',
+          date
+        });
+      }
+
+      return {
+        ...d,
+        amount: newAmount,
+        status: newlyPaid ? 'pago' : d.status,
+        payments: newPayments
+      };
+    }));
+  };
+
+  const markDebtAsPaid = (id: string) => {
+    const today = '2026-05-23';
+    setDebtors(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      if (d.amount === 0) return d;
+      
+      const remainingAmount = d.amount;
+      const newPayments = [
+        ...d.payments,
+        {
+          id: 'pay_' + Math.random().toString(36).substring(2, 11),
+          date: today,
+          amount: remainingAmount
+        }
+      ];
+
+      addNotification('Dívida Quitada! 🎉', `${d.name} quitou o valor de R$ ${remainingAmount.toFixed(2)}!`, 'goal');
+      addPoints(40);
+      
+      // Add as a gain transaction automatically to balance ledger
+      addTransaction({
+        amount: remainingAmount,
+        description: `Recebimento: Quitação de ${d.name}`,
+        category: 'vendas',
+        type: 'gain',
+        date: today
+      });
+
+      return {
+        ...d,
+        amount: 0,
+        status: 'pago',
+        payments: newPayments
+      };
+    }));
+  };
+
   // Financial Goals Goals
   const addGoal = (g: Omit<FinancialGoal, 'id' | 'achieved'>) => {
     const newGoal: FinancialGoal = {
@@ -308,6 +475,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // EXPLICIT SERVER AI METHOD PROXIES
   // ==========================================
 
+  const updateApiStatusFromData = (data: any) => {
+    if (data) {
+      if (data.apiQuotaExceeded) {
+        setApiStatus('quota_exhausted');
+      } else if (data.usingLocalFallback) {
+        setApiStatus('offline');
+      } else {
+        setApiStatus('online');
+      }
+    }
+  };
+
   // Method 1: Speech recognition response or manual text parser proxy
   const parseFinancialCommand = async (phrase: string): Promise<Transaction | null> => {
     setIsLoadingAI(true);
@@ -320,6 +499,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!res.ok) throw new Error("Parse request failed");
       const data = await res.json();
       
+      updateApiStatusFromData(data);
+
       if (data && data.amount > 0) {
         // Complete data mapping
         const transactionAdded = addTransaction({
@@ -351,6 +532,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       if (!res.ok) throw new Error("OCR Scanning request failed");
       const data = await res.json();
+
+      updateApiStatusFromData(data);
 
       if (data && data.amount) {
         const txObj = addTransaction({
@@ -394,6 +577,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       if (!res.ok) throw new Error("Insights failed");
       const data = await res.json();
+      
+      updateApiStatusFromData(data);
+
       setAiInsight({
         summaryText: data.summaryText,
         predictionText: data.predictionText,
@@ -431,6 +617,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       if (!res.ok) throw new Error("Advisor API failed");
       const data = await res.json();
+      
+      updateApiStatusFromData(data);
+
       return data.response || "Tive um desvio de atenção, pode repetir seu pedido?";
     } catch (err) {
       console.error("askAIAdvisor error:", err);
@@ -447,6 +636,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       notifications,
       aiInsight,
       isLoadingAI,
+      apiStatus,
+      debtors,
       addTransaction,
       deleteTransaction,
       addDriverLog,
@@ -457,6 +648,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       verifyStreak,
       markNotificationsAsRead,
       addNotification,
+      addDebtor,
+      deleteDebtor,
+      addPaymentToDebtor,
+      markDebtAsPaid,
       parseFinancialCommand,
       scanReceiptOCR,
       recalculateInsights,

@@ -56,7 +56,11 @@ async function startServer() {
 
     if (!ai) {
       // Robust regex-based fallbacks for offline / keyless testing
-      return res.json(parseTextFallback(phrase));
+      return res.json({
+        ...parseTextFallback(phrase),
+        usingLocalFallback: true,
+        apiQuotaExceeded: false
+      });
     }
 
     try {
@@ -102,10 +106,25 @@ async function startServer() {
 
       const text = response.text ? response.text.trim() : "{}";
       const parsedData = JSON.parse(text);
-      res.json(parsedData);
+      res.json({
+        ...parsedData,
+        usingLocalFallback: false,
+        apiQuotaExceeded: false
+      });
     } catch (err: any) {
-      console.error("Gemini parse-text failed, deploying fallback pattern:", err);
-      res.json(parseTextFallback(phrase));
+      console.warn("Gemini parse-text failed gracefully, deploying fallback pattern. Error was: " + err?.message);
+      const isQuota = JSON.stringify(err).toLowerCase().includes("spending cap") || 
+                      JSON.stringify(err).toLowerCase().includes("exhausted") || 
+                      JSON.stringify(err).toLowerCase().includes("429") || 
+                      (err?.message && err.message.toLowerCase().includes("spending cap")) ||
+                      (err?.message && err.message.toLowerCase().includes("exhausted")) ||
+                      err?.status === 429 || err?.statusCode === 429;
+                      
+      res.json({
+        ...parseTextFallback(phrase),
+        usingLocalFallback: true,
+        apiQuotaExceeded: isQuota
+      });
     }
   });
 
@@ -121,7 +140,11 @@ async function startServer() {
     if (!ai) {
       // Simulate receipt scanning for rapid keyless evaluation
       return setTimeout(() => {
-        res.json(mockReceiptScannerSuccess());
+        res.json({
+          ...mockReceiptScannerSuccess(),
+          usingLocalFallback: true,
+          apiQuotaExceeded: false
+        });
       }, 1500);
     }
 
@@ -195,10 +218,25 @@ async function startServer() {
 
       const text = response.text ? response.text.trim() : "{}";
       const parsedData = JSON.parse(text);
-      res.json(parsedData);
+      res.json({
+        ...parsedData,
+        usingLocalFallback: false,
+        apiQuotaExceeded: false
+      });
     } catch (err: any) {
-      console.error("Gemini parse-receipt failed, deploying fallback pattern:", err);
-      res.json(mockReceiptScannerSuccess());
+      console.warn("Gemini parse-receipt failed gracefully, deploying fallback pattern. Error was: " + err?.message);
+      const isQuota = JSON.stringify(err).toLowerCase().includes("spending cap") || 
+                      JSON.stringify(err).toLowerCase().includes("exhausted") || 
+                      JSON.stringify(err).toLowerCase().includes("429") || 
+                      (err?.message && err.message.toLowerCase().includes("spending cap")) ||
+                      (err?.message && err.message.toLowerCase().includes("exhausted")) ||
+                      err?.status === 429 || err?.statusCode === 429;
+
+      res.json({
+        ...mockReceiptScannerSuccess(),
+        usingLocalFallback: true,
+        apiQuotaExceeded: isQuota
+      });
     }
   });
 
@@ -209,7 +247,11 @@ async function startServer() {
     const ai = getAIClient();
 
     if (!ai) {
-      return res.json(generateLocalInsights(transactions || [], driverLogs || [], currentBalance || 0));
+      return res.json({
+        ...generateLocalInsights(transactions || [], driverLogs || [], currentBalance || 0),
+        usingLocalFallback: true,
+        apiQuotaExceeded: false
+      });
     }
 
     try {
@@ -274,10 +316,25 @@ async function startServer() {
 
       const text = response.text ? response.text.trim() : "{}";
       const parsedData = JSON.parse(text);
-      res.json(parsedData);
+      res.json({
+        ...parsedData,
+        usingLocalFallback: false,
+        apiQuotaExceeded: false
+      });
     } catch (err: any) {
-      console.error("Gemini insights calculation failed, using fallback:", err);
-      res.json(generateLocalInsights(transactions || [], driverLogs || [], currentBalance || 0));
+      console.warn("Gemini insights failed gracefully, deploying fallback pattern. Error was: " + err?.message);
+      const isQuota = JSON.stringify(err).toLowerCase().includes("spending cap") || 
+                      JSON.stringify(err).toLowerCase().includes("exhausted") || 
+                      JSON.stringify(err).toLowerCase().includes("429") || 
+                      (err?.message && err.message.toLowerCase().includes("spending cap")) ||
+                      (err?.message && err.message.toLowerCase().includes("exhausted")) ||
+                      err?.status === 429 || err?.statusCode === 429;
+
+      res.json({
+        ...generateLocalInsights(transactions || [], driverLogs || [], currentBalance || 0),
+        usingLocalFallback: true,
+        apiQuotaExceeded: isQuota
+      });
     }
   });
 
@@ -298,7 +355,9 @@ async function startServer() {
 
     if (!ai) {
       return res.json({
-        response: generateAdvisorChatFallback(messages[messages.length - 1]?.content || "", context)
+        response: generateAdvisorChatFallback(messages[messages.length - 1]?.content || "", context),
+        usingLocalFallback: true,
+        apiQuotaExceeded: false
       });
     }
 
@@ -320,10 +379,25 @@ async function startServer() {
         }
       });
 
-      res.json({ response: response.text ? response.text.trim() : "Me desculpe, tive um probleminha para pensar agora." });
+      res.json({
+        response: response.text ? response.text.trim() : "Me desculpe, tive um probleminha para pensar agora.",
+        usingLocalFallback: false,
+        apiQuotaExceeded: false
+      });
     } catch (err: any) {
-      console.error("AI Consultant chat failure:", err);
-      res.json({ response: generateAdvisorChatFallback(messages[messages.length - 1]?.content || "", context) });
+      console.warn("Gemini consultant-chat failed gracefully, deploying fallback pattern. Error was: " + err?.message);
+      const isQuota = JSON.stringify(err).toLowerCase().includes("spending cap") || 
+                      JSON.stringify(err).toLowerCase().includes("exhausted") || 
+                      JSON.stringify(err).toLowerCase().includes("429") || 
+                      (err?.message && err.message.toLowerCase().includes("spending cap")) ||
+                      (err?.message && err.message.toLowerCase().includes("exhausted")) ||
+                      err?.status === 429 || err?.statusCode === 429;
+
+      res.json({
+        response: generateAdvisorChatFallback(messages[messages.length - 1]?.content || "", context),
+        usingLocalFallback: true,
+        apiQuotaExceeded: isQuota
+      });
     }
   });
 
